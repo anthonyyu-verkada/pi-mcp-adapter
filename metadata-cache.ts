@@ -127,8 +127,14 @@ export function isServerCacheValid(
   if (!entry || entry.configHash !== configHash) return false;
   if (!entry.cachedAt || typeof entry.cachedAt !== "number") return false;
   const declaredTtlMs = entry.ttlMs;
-  if (typeof declaredTtlMs === "number" && Number.isSafeInteger(declaredTtlMs) && declaredTtlMs >= 0) {
-    if (declaredTtlMs === 0) return false;
+  // A positive integer ttlMs is an explicit server freshness hint and is honored.
+  // ttlMs === 0 ("do not reuse this tool list") is treated as "no hint": for a
+  // single-user agent the list is stable per account, so fall through to the
+  // adapter's default max-age instead of permanently invalidating the cache.
+  // Without this, servers like Linear/Notion (which declare ttlMs: 0) can never
+  // pass cache validity, so namespace proxies and directTools never register
+  // for them — leaving the polymorphic `mcp` gateway as their only interface.
+  if (typeof declaredTtlMs === "number" && Number.isSafeInteger(declaredTtlMs) && declaredTtlMs > 0) {
     const ageMs = Date.now() - entry.cachedAt;
     const effectiveMaxAge = maxAgeMs > 0 ? Math.min(maxAgeMs, declaredTtlMs) : declaredTtlMs;
     return ageMs < effectiveMaxAge;
